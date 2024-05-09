@@ -1,0 +1,110 @@
+using Xunit;
+using Moq;
+using MailKit.Net.Smtp;
+
+public class MailtrapClientTests
+{
+    private Mock<SmtpClient> _smtpClientMock;
+    private MailtrapClient _mailtrapClient;
+
+    public MailtrapClientTests()
+    {
+        _smtpClientMock = new Mock<SmtpClient>();
+        var config = new MailtrapConfig
+        {
+            Username = "your-username",
+            Password = "your-password"
+            // ... other configuration
+        };
+        _mailtrapClient = new MailtrapClient(config);
+        // Inject the mocked SmtpClient into your MailtrapClient
+        // This assumes you have a way to inject dependencies in your MailtrapClient
+        _mailtrapClient.SetSmtpClient(_smtpClientMock.Object); 
+    }
+
+    [Fact]
+    public async Task SendAsync_Success_SendsEmail()
+    {
+        // Arrange
+        var message = new EmailMessage
+        {
+            SenderName = "Test Sender",
+            SenderEmail = "sender@example.com",
+            RecipientName = "Test Recipient",
+            RecipientEmail = "recipient@example.com",
+            Subject = "Test Subject",
+            Text = "Test Body"
+        };
+
+        // Act
+        var result = await _mailtrapClient.SendAsync(message);
+
+        // Assert
+        Assert.True(result);
+        _smtpClientMock.Verify(client => client.ConnectAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<bool>()), Times.Once);
+        _smtpClientMock.Verify(client => client.AuthenticateAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Once);
+        _smtpClientMock.Verify(client => client.SendAsync(It.IsAny<MimeMessage>()), Times.Once);
+        _smtpClientMock.Verify(client => client.DisconnectAsync(It.IsAny<bool>()), Times.Once);
+    }
+
+
+    [Fact]
+    public async Task SendAsync_ErrorDuringConnect_ReturnsFalseAndLogsError()
+    {
+        // Arrange
+        _smtpClientMock.Setup(client => client.ConnectAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<bool>()))
+            .ThrowsAsync(new Exception("Connection failed"));
+        var message = new EmailMessage { /* ... */ };
+
+        // Act
+        var result = await _mailtrapClient.SendAsync(message);
+
+        // Assert
+        Assert.False(result);
+        // Verify logging behavior if using Serilog or another logging framework
+    }
+
+    [Fact]
+    public async Task SendAsync_TransientError_RetriesAndSucceeds()
+    {
+        // Arrange
+        var attempt = 0;
+        _smtpClientMock.Setup(client => client.SendAsync(It.IsAny<MimeMessage>()))
+            .ThrowsAsync(new Exception("Transient error"))
+            .Callback(() =>
+            {
+                if (++attempt == 2) // Succeed on the 3rd attempt (2 retries)
+                {
+                    _smtpClientMock.Setup(client => client.SendAsync(It.IsAny<MimeMessage>()))
+                        .Returns(Task.CompletedTask);
+                }
+            });
+        var message = new EmailMessage { /* ... */ };
+
+        // Act
+        var result = await _mailtrapClient.SendAsync(message);
+
+        // Assert
+        Assert.True(result);
+        _smtpClientMock.Verify(client => client.SendAsync(It.IsAny<MimeMessage>()), Times.Exactly(3));
+    }
+
+    [Fact]
+    public async Task SendAsync_HtmlContent_SendsHtmlEmail()
+    {
+        // Arrange
+        var message = new EmailMessage
+        {
+            /* ... other properties ... */
+            Html = "<p>This is an HTML email.</p>"
+        };
+
+        // Act
+        await _mailtrapClient.SendAsync(message);
+
+        // Assert
+        _smtpClientMock.Verify(client => client.SendAsync(It.Is<MimeMessage>(m => m.HtmlBody != null)), Times.Once);
+    }
+
+    // Add more tests for different content types (e.g., attachments)
+}

@@ -1,0 +1,81 @@
+can you add error handling 
+.net Developer Freelance - Test TaskInstructionsThank you for your interest in the recruitment process at Railsware. Below you can find the description of the test task we would like you to work on in order to proceed. 
+If you have any questions or comments, use the "comment" option for communication and pingAlina Kashpurenkoto review them. 
+If you need to use external software for performing the task, please provide access to ,Tudor MarciuandMarcin KlocekWe wish you good luck!
+The contextCreate an extendable client with a method that will send an email using the Mailtrap Email Sending APIhttps://api-docs.mailtrap.io/docs/mailtrap-api-docs/. The send() method should be able to receive a number of parameters, some of them optional.
+
+For this task, the method should work when being called with the following parameters:
+sender name and emailrecipient name and emailsubjecttexthtmlattachmentsHighly recommended, create unit tests to cover the functionality available. 
+
+Optionally package the client in a standalone library that is ready for distribution.Additional information:* You can create a free Mailtrap Email Sending account (to use for smoke testing) athttps://mailtrap.io/register/signup* You can see examples of how such a method would be called (in either Ruby of NodeJS) at:
+	*https://github.com/railsware/mailtrap-ruby*https://github.com/railsware/mailtrap-nodejsadd error handling and make it extendable by other applications or libraries as this is going to be delivered as a library
+Additional Considerations:
+You might want to use a logging library like NLog or Serilog to log errors more effectively.Consider implementing a retry mechanism for transient errors.You can further enhance the code with unit tests to ensure the functionality works as expected.Add also a way to make the MailtrapClient extendable and allow other developpers to implement other types of sending method or use their own sending mechanism but leveraging the properties or the mailtrapclient itselfnheritance: The MailTrapClient class can be extended to create specific subclasses with additional functionalities or behavior.Interfaces: You could define an interface like IEmailSender with a SendAsync method, and then implement the MailTrapClient as a concrete implementation of that interface. This allows for easier swapping of email sending mechanisms in the future.Retry mechanism: Implement a retry mechanism for transient errors using a library like Polly.Unit tests: Write unit tests to cover different scenarios and edge cases of email sending.consider the next code as a reference in typescript, you can use it and convert it to c#: 
+import nodemailer from 'nodemailer'
+
+export class MailTrapClient {
+ transporter
+ config = {}
+
+ constructor ({
+  user,
+  pass,
+  host,
+  port
+ }: {
+  user: string,
+  pass: string,
+  host?: string,
+  port?:number
+ }) {
+
+  this.config = {
+   host: host || "sandbox.smtp.mailtrap.io",
+   port: port || 2525,
+   secure: false,
+   auth: {
+    // TODO: replace `user` and `pass` values from <https://forwardemail.net>
+    user: user,
+    pass: pass
+   },
+   tls: {
+    ciphers: 'SSLv3'
+   }
+  }
+
+  this.transporter = nodemailer.createTransport(this.config)
+ }
+
+ // async..await is not allowed in global scope, must use a wrapper
+ async send ({
+  from,
+  to,
+  subject,
+  text,
+  html,
+  attachments
+ }: {
+  from: string
+  to: string | object
+  subject?: string
+  text?: string
+  html?: string,
+  attachments?: object
+ }): Promise<Object> {
+  // send mail with defined transport object
+  try {
+   const info = await this.transporter.sendMail({
+    from, // sender address
+    to, // list of receivers
+    subject: subject || "Empty Subject", // Subject line
+    text: text || "Empty Text", // plain text body
+    html: html || "Empty Body", // html body
+    attachments: attachments || []
+   })
+
+   return info
+  } catch (e) {
+   throw 'Error:' + e + "\n" + JSON.stringify(this.config)
+  }
+ }
+}
